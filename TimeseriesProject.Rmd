@@ -1,0 +1,842 @@
+---
+title: "Project Timeseries"
+output:
+  html_document: default
+  pdf_document: default
+date: "2022-11-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r install tidyverse if not installed}
+if(!require(tidyverse)){
+    install.packages(tidyverse)
+}
+
+
+```
+
+
+```{r imports}
+library(tidyverse)
+library(forecast)
+library(forecast)
+library("TTR")
+library(tseries)
+library(fpp)
+```
+
+Lecture des datas:
+
+```{r lecture des datas}
+day <- read.csv("day.csv")
+hour <- read.csv("hour.csv")
+```
+```{r}
+head(day)
+```
+
+## 1)a)
+
+###  Distribution de temperatures en fonction des saisons:
+
+```{r distribution en fonction des saisons}
+ggplot(day,aes(x=as.factor(mnth),y=temp,fill=as.factor(season)))+theme_bw()+geom_col()+
+labs(x='Month',y='Temperatures',title='Season wise monthly distribution of temperature')
+#TODO: Change labels (especially as factor of seasons)
+```
+
+On voit que les temperatures augmentent jusqu'a la moitie  de l'annee puis redescendent ensuite.
+Par ailleurs, on remarque que les temperatures sont les  plus eleves pendant la saison 3(c'est a dire l'été), et baissent pendant la saison 4 (automne) jusqu'a devenir minimales en saison 1 (hivers).
+
+On peut aussi visualiser avec des boxplots:
+
+```{r}
+ggplot(day, aes(x=as.factor(season),y=temp)) +
+  geom_boxplot(color = "blue") + 
+  labs(x='Seasons',y='Tempratures',title='Box plot of the season wise temprature distribution')
+```
+
+On remarque d'il y a des outliers en saison 1(hiver) et 3(ete),avec des valeurs qui sont respectivement plus elevees que la normale et plus basses.
+
+###  Moyenne des temperatures:
+
+```{r}
+mean(day$temp)
+```
+
+###  Mediane des temperatures:
+
+```{r}
+median(day$temp)
+```
+
+On a une temperature moyenne de 0.49538 et une mediane de 0.49833.
+
+## 1)b) 
+
+### Correlation entre la temperature temp et le nombre total de location de vélos cnt:
+
+```{r}
+ggplot(data = day) +
+  geom_point(mapping = aes(x = temp, y = cnt), color = "#CC0099") +
+  labs(x='Temperature',y='Total_Count',title='Nombre total de velos en fonction de la temperature')
+
+```
+
+
+Les points forment une figure etiree. On peut envisager une correlation lineaire entre les deux variables.
+Pour verifier cela, on calcule la correlation:
+
+
+```{r}
+cor.test(day$temp, day$cnt, method=c("pearson", "kendall", "spearman"))
+```
+Le coefficient de correlation est de 0.627, ce qui n'est pas extrêmement élevé, de plus, la p-value
+est inférieure a 5%, ce qui veut dire que la correlation est statistiquement significative.
+ 
+
+On fait de meme pour les variables atemp et cnt:
+
+### Correlation entre la temperature ressentie atemp et le nombre total de location de vélos cnt:
+
+```{r}
+ggplot(data = day) +
+  geom_point(mapping = aes(x = atemp, y = cnt), color = "#CC0099") +
+  labs(x='Temperature Normalise',y='Total_Count',title='Nombre total de velos en fonction de la temperature normalise')
+
+```
+
+
+```{r}
+cor.test(day$atemp, day$cnt, method=c("pearson", "kendall", "spearman"))
+```
+On constate la meme chose pour la variable atemp, il n'y a pas une grande differance entre la relation cnt-temp et cnt-atemp.
+
+
+### Correlation entre la moyenne des temperatures réelles et ressenties (temp et atemp) et le nombre total de location de vélos cnt:
+
+Pour la correlation entre cnt et mean(temp, atemp), on rajoute une colonne qui represente la moyenne entre temp et atemp, puis on repete les memes operations:
+
+```{r}
+day$"mean_temp_atemp" <- apply(day[, 10:11], 1, mean)
+head(day)
+```
+
+On affiche les données:
+
+```{r}
+ggplot(data = day) +
+  geom_point(mapping = aes(x = mean_temp_atemp, y = cnt), color = "#CC0099") +
+  labs(x='Temperature',y='Total_Count',title='Nombre total de velos en fonction de la temperature moyenne')
+```
+```{r}
+cor.test(day$mean_temp_atemp, day$cnt, method=c("pearson", "kendall", "spearman"))
+```
+On obtient un resulat similaire avec un coefficient de correlation est de 0.6305, et une p-value inférieure a 5%, ce qui veut dire que la correlation est statistiquement significative.
+
+
+## 1)c)
+
+### Temperatures moyennes par mois:
+
+```{r temp moyennes per month}
+#Temperatures moyennes
+Temperatures_moyennes <- aggregate(day$temp, list(day$mnth), FUN=mean, na.rm=TRUE)
+ggplot(data = Temperatures_moyennes, mapping = aes(x = Group.1, y = x)) + 
+  geom_point(  shape = 18, size = 5) +  
+  geom_smooth(formula = y ~ x, method = "loess",se = FALSE,  color = "#CC0099")  +
+  labs(x= "Mois", y =  "Temperatures moyennes", title="Temperature moyennes par mois" ) +
+  xlim(1,12)
+
+```
+
+### Humidite moyennes par mois:
+
+```{r humidite moyenne per month}
+#Humidite moyenne
+Hum_moyennes <- aggregate(day$hum, list(day$mnth), FUN=mean, na.rm=TRUE)
+ggplot(data = Hum_moyennes, mapping = aes(x = Group.1, y = x)) + 
+  geom_point(  shape = 18, size = 5) +  
+  geom_smooth(formula = y ~ x, method = "loess",se = FALSE,  color = "#CC0099")  +
+  labs(x= "Mois", y =  "Humidite moyennes", title="Humidite moyennes par mois" ) +
+  xlim(1,12)
+
+```
+
+### Vent moyen par mois:
+```{r windspeed moy per month}
+#Vent moyen
+Vent_moyen <- aggregate(day$windspeed, list(day$mnth), FUN=mean, na.rm=TRUE)
+ggplot(data = Vent_moyen, mapping = aes(x = Group.1, y = x)) + 
+  geom_point(  shape = 18, size = 5) +  
+  geom_smooth(formula = y ~ x, method = "loess",se = FALSE,  color = "#CC0099")  +
+  labs(x= "Mois", y =  "Vent moyen", title="Vent moyen par mois" ) +
+  xlim(1,12)
+
+```
+
+### Moyenne du total de velos loues par mois:
+
+```{r cnt moy per month}
+#Total velos loues moyennes
+Total_moyen <- aggregate(day$cnt, list(day$mnth), FUN=mean, na.rm=TRUE)
+ggplot(data = Total_moyen, mapping = aes(x = Group.1, y = x)) + 
+  geom_point(  shape = 18, size = 5) +  
+  geom_smooth(formula = y ~ x, method = "loess",se = FALSE,  color = "#CC0099")  +
+  labs(x= "Mois", y =  "Moyenne du nombre de velos total loues ", title="Moyenne du total de velos loues par mois" ) +
+  xlim(1,12)
+
+```
+
+## 1)d)
+
+### correlation temp et les locations de vélos:
+
+```{r correlation temp et locations registered}
+ggplot(data = day) +
+  geom_point(mapping = aes(x =temp, y = registered), color = "#CC0099") +
+  labs(x='Temperature',y='Registered',title='Location velos registered en fonction de la temperature')
+```
+```{r correlation temp et locations casual}
+ggplot(data = day) +
+  geom_point(mapping = aes(x =temp, y = casual), color = "#CC0099") +
+  labs(x='Temperature',y='Casual',title='Location velos casual en fonction de la temperature')
+
+```
+
+Il semble y avoir une relation entre temp et registered/casual, en effet on remarque que les deux variables augmentent dans le meme sense. 
+
+On peut calculer le coefficient de corelation: 
+
+```{r}
+cor.test(day$temp, day$registered, method=c("pearson", "kendall", "spearman"))
+cor.test(day$temp, day$casual, method=c("pearson", "kendall", "spearman"))
+```
+
+On constate que l'on a un coefficient de corrélation de 0.54 pour registered (et 0.543 pour registered) , ce qui n'est pas tres élevé.On a une p-value inférieure a 5%, donc la correlation est statistiquement significative.
+
+
+### Dans ce qui suit, nous allons construire un modele prédictif du nombre de locations de vélos par jour:
+
+## 1)e)
+
+On cree une timeseries de la valiable cnt,qui commence le 1er janvier 2011 et qui a pour frequence 365 (car on a des informations journalieres)
+
+```{r plot cnt vs dteday }
+countts <- ts(day$cnt, frequency=365, start=c(2011,1))
+plot.ts(countts)
+```
+
+On decompose la time series pour bien voir la tendence et la saisonalite:
+```{r}
+counttscomponents <- decompose(countts)
+plot(counttscomponents)
+```
+
+On remarque une tendance croissante, et on peut apercevoir deux saisons. La composante random, elle, n'est pas du tout stationnaire autours de 0 et ne forme pas un bruit blanc.
+
+## 1)f) Enlever les outliers:
+
+Pour enlever les outliers et les valuers manquantes de la time serie, on fait appel a la fonction `tsclean`:
+
+```{r}
+countts.clean <- tsclean(countts)
+outliers.missing.val <- countts[countts.clean != countts]
+outliers.missing.val
+length(outliers.missing.val)
+#first.cnt.ts.clean <-  tsclean(first_cnt_ts)
+#outliers <- first_cnt_ts[first.cnt.ts.clean != first_cnt_ts ] 
+#outliers
+```
+On peut remarquer que la time serie de base countts contenait 30 outliers et/ou valeurs manquantes.
+
+
+
+```{r plot the cleaned countts}
+plot.ts(countts.clean)
+```
+
+
+
+### Lisser la time series:
+
+Afin de lisser la ts, nous devons choisir la bonne méthode, pour cela, nous allons vérifier la tendance et la saisonnalité de la série, grace a la décomposition de la serie sans outliers:
+
+```{r recheck decomposition}
+cout.clean.components <- decompose(countts.clean)
+plot(cout.clean.components)
+
+```
+
+
+On voit bien que la série a une tendance ascendante, mais on voit aussi que la composante random n’est pas stationnaire du tout et ne ressemble pas à un bruit blanc, ce qui nous fait nous interroger sur la composante saisonnalité de la série chronologique.
+
+Cependant, nous allons en premier temps essayer de la lisser naïvement avec SMA:
+
+#### Lissage SMA:
+
+```{r smoothing with SMA}
+cnt.ts.sma10 <- SMA(countts.clean, n=10)
+plot.ts(countts.clean)
+plot.ts(cnt.ts.sma10, col = "blue")
+
+  
+```
+
+La serie chronologique parait bien lissée avec SMA, car elle garde sa forme d'origine en enlevant les piques (les valeurs les plus extremes). 
+
+
+Nous pouvons aussi considerer que la serie chronologique a une saisonnalité, dans ce cas, on peut utiliser la méthode HoltsWinters pour la lisser :
+
+
+
+#### Lissage HoltWinters:
+
+```{r}
+cnt.ts.hw <- HoltWinters(countts.clean)
+plot(cnt.ts.hw)
+plot.ts(countts.clean)
+plot.ts(cnt.ts.hw$fitted[,1])
+#cnt.ts.hw
+#?HoltWinters
+```
+
+
+On remarque que la courbe qui resulte du lissage HoltWinters ne lisse pas assez bien l'entiereté de la série chronologique.
+
+## 2 Choisir la meilleure methode de lissage:
+
+Nous allons ajouter une fréquence aux deux séries lissées SMA et HoltWinters, puis nous analyserons les différences:
+
+### Ajouter une fréquence a la série chronologique SMA:
+
+On rajoute une frequence de 30 pour avoir une saisonalité par mois.
+
+```{r add seasonality to sma}
+cnt.ts.sma30 <- ts(cnt.ts.sma10, frequency = 30)
+plot.ts(cnt.ts.sma30)
+
+```
+
+Pour avoir plus d'informations sur cette nouvelle série chronologique, nous allons la décomposer:
+
+```{r decompose new sma}
+dec.sma30 <- decompose(cnt.ts.sma30)
+plot(dec.sma30)
+
+```
+
+
+On remarque assez facilement qu'il y a un pattern dans la saisonalité, et on peut apercevoir une tendance ascendante, (même si elle est moins claire que dans la décomposition précédante de 365)
+
+
+Voyons si la composante random représente un bruit blanc, pour cela, nous allons utiliser le test Ljung
+
+
+```{r}
+Box.test(dec.sma30$random, type = "Ljung-Box")
+
+```
+
+La p-value est bien inferieure de 5%, ce qui nous mène à rejeter l'hypothèse nulle, i.e il reste une autocorrelation dans la série et elle ne représente pas un bruit blanc.
+
+
+
+### Ajouter une fréquence a la série chronologique HoltWinters:
+
+```{r}
+#create a new time series with the right frequence
+new.ts.30 <- ts(countts.clean, frequency = 30, start  = c(2011, 1))
+#clean the ts
+new.ts.clean30 <- tsclean(new.ts.30)
+
+#smooth it using HoltWinters method
+cnt.ts.hw30 <- HoltWinters(new.ts.clean30)
+plot(cnt.ts.hw30)
+cnt.ts.hw30
+
+```
+
+On remarque que le lissage HoltWinters apparait beaucoup mieux avec une frequence 30 plutot que la frequence 365 testée précédemment
+
+Voyons maintenant sa décomposition:
+
+```{r decompose new holtwinters freq 30}
+decompose.hw30 <- decompose(cnt.ts.hw30$fitted[,1])
+plot(decompose.hw30)
+
+```
+
+Il y a bien une saisonnalité assez claire, la tendance apparait proche que celle qu'on a observé dans la décomposition de SMA.
+Intéressons nous maintenant a la composante random et voyons si c'est un bruit blanc:
+
+```{r random hw30}
+Box.test(decompose.hw30$random, type = "Ljung")
+
+```
+
+Ici aussi, on a une p-value inférieure a 5%, ce qui montre que la composante random n'est pas un bruit blanc. Ce qui veut dire qu'il reste encore de l'information dans la composante random qui n'a pas été pris en compte, dans la saisonalité ou dans la tendance de la série.
+
+Cependant, comme on a bien remarqué une saisonalité dans la série chronologique en mettant la fréquence a 30, il serait mieux de choisir le lissage HoltWinters, qui est approprié pour une timeséries avec saisonalité.
+
+
+
+## Modeliser la série lissée avec ARIMA:
+
+Avant toute chose, nous devons nous assurer que la série chronologique est bien stationnaire, pour cela, on effectue un test `adf`:
+
+```{r test stationarity of hw}
+
+#récuperer la ts:
+cnt.ts.hw <- cnt.ts.hw30$fitted[,1]
+
+#tester la stationnarité:
+adf.test(cnt.ts.hw)
+
+
+```
+
+La p-value est supérieure a 5%, ce qui veut dire que la serie n'est pas stationnaire, il va falloir la différencier.
+
+Pour estimer le nombre de différentiations qu'on doit faire a la série, on peut utiliser la fonction `ndiffs`
+
+```{r ndiffs hw}
+ndiffs(cnt.ts.hw)
+```
+
+On doit différencier une seule fois.
+
+Intéressons nous maintenant aux ACF et PACF:
+
+```{r acf pacf hw before}
+
+cnt.ts.hw.diff <- diff(cnt.ts.hw, differences = 1 )
+ggtsdisplay(cnt.ts.hw.diff, lag = 20)
+
+```
+
+Les modeles candidats sont MA(2), AR(4) (apres différenciation) ou ARIMA(4,1,2)
+
+D'apres le principe de parsimonie, on devrait choisir le premier candidat MA(2), car il ne contient que deux parametres.
+
+#### MA(2)
+
+```{r MA2 hw}
+cnt.ts.hw.ma2 <- arima(cnt.ts.hw, order = c(0,1,2))
+cnt.ts.hw.ma2
+
+```
+On a un log likelihood négatif, et un AIC = 10437.32
+
+
+Predictions du modele MA(2):
+
+```{r forecast MA(2) hw}
+cnt.ts.hw.ma2.forecast <- forecast(cnt.ts.hw.ma2, h = 10)
+plot(cnt.ts.hw.ma2.forecast)
+
+```
+
+Le forecast n'a pas l'air tres satisfaisant, car la prediction est une ligne droite.
+
+
+Voyons les résiduels de ce forecast:
+
+```{r residuels MA(2) hw}
+
+ggtsdisplay(cnt.ts.hw.ma2.forecast$residuals, lag = 20)
+
+```
+
+On remarque qu'il reste quand meme des lags (3) non nuls dans les ACF des résiduels.
+
+```{r residuals LJUNG hw MA(2)}
+Box.test(cnt.ts.hw.ma2.forecast$residuals, type = "Ljung-Box")
+
+```
+La p-value est supérieure a 5%, ce qui veut dire que les résiduels peuvent etre interpretés comme un bruit blanc.
+
+
+
+On s'interesse aux deux autres modeles pour comparer leurs resultats:
+
+
+
+#### AR(4)
+
+```{r AR(4) hw}
+cnt.ts.hw.ar4 <- arima(cnt.ts.hw, order = c(4,1,0))
+cnt.ts.hw.ar4
+
+```
+Le log likelihood est aussi negatif, et l'AIC est de 10443, ce qui est supérieur a l'AIC du modele MA(2), donc si on cherche a minimiser l'AIC, MA(2) est un meilleur modele.
+
+Predictions du modele AR(4):
+
+```{r forecast AR(4) hw}
+cnt.ts.hw.ar4.forecast <- forecast(cnt.ts.hw.ar4, h = 10)
+plot(cnt.ts.hw.ar4.forecast)
+
+```
+
+Le forecast semble bien prendre en compte les variations de la timeseries.
+
+
+Voyons les résiduels de ce forecast:
+
+```{r residuels AR(4) hw}
+
+ggtsdisplay(cnt.ts.hw.ar4.forecast$residuals, lag = 20)
+
+```
+
+Ici aussi, on remarque des lags (4) non nuls au niveau de l'ACF des résidus.
+
+```{r residuals LJUNG hw AR(4)}
+Box.test(cnt.ts.hw.ar4.forecast$residuals, type = "Ljung-Box")
+
+```
+
+On a une p-value supérieure a 5%, les residus forment donc un bruit blanc.
+
+
+Interessons nous maintenant au dernier modele ARIMA(4,1,2):
+
+#### ARIMA(4,1,2)
+
+```{r ARIMA(7) hw}
+cnt.ts.hw.arima7 <- arima(cnt.ts.hw, order = c(4,1,2))
+cnt.ts.hw.arima7
+
+```
+
+On remarque que ARIMA(4,1,2) minimise l'AIC.
+
+
+```{r forecast ARIMA(7) hw}
+cnt.ts.hw.arima7.forecast <- forecast(cnt.ts.hw.arima7, h = 10)
+plot(cnt.ts.hw.arima7.forecast)
+
+```
+
+
+On remarque une hausse dans les predictions est non pas une ligne droite.
+
+
+
+Voyons les résiduels de ce forecast:
+
+```{r residuels ARIMA(7) hw}
+
+ggtsdisplay(cnt.ts.hw.arima7.forecast$residuals, lag = 20)
+
+```
+
+Ici aussi, on a deux lags non nuls dans les ACF des résiduels.
+
+
+```{r residuals LJUNG hw ARIMA(7)}
+
+Box.test(cnt.ts.hw.ar4.forecast$residuals, type = "Ljung-Box")
+
+```
+
+p-value > 5% donc résiduels sont susceptibles d'etre un bruit blanc.
+
+
+
+#### Pour résumer, en se basant sur le principe de parsimonie, le modele AR(2) parait le plus interessant, mais si on s'interesse a minimiser l'AIC et a avoir des résidus qui se rapprochent le plus d'un bruit blanc, alors le modele ARIMA(4,1,2) est a privilégier.
+
+"Remember that all models are wrong; the practical question is how wrong
+do they have to be to not be useful."
+-George E. P. Box, Norman R. Draper
+Empirical Model
+
+
+
+
+
+
+
+## Q4: Prédictions avec le modele ARIMA
+
+4)I)
+On enleve la saisonalité:
+
+```{r enlever la saisonalite}
+#lire la ts avec frequence 30
+countts <- ts(day$cnt, frequency=30, start=c(2011, 1))
+#clean la ts
+countts.clean <- tsclean(countts)
+#decomposer la ts
+decomp <- decompose(countts.clean)
+
+#ajuster la ts en enlevant la saisonnalite
+adjusted <- countts.clean - decomp$seasonal
+
+adjusted <- ts(adjusted, start=c(2011, 1))
+plot.ts(adjusted)
+plot.ts(countts.clean)
+
+```
+
+Voyons si la timeseries est stationnaire:
+
+```{r desaisonnalisee stationnaire}
+adf.test(adjusted)
+
+```
+
+On a une timeseries  non stationnaire, donc on doit differencier, on utilise ndiffs pour savoir combien de fois il faut le faire.
+
+```{r}
+ndiffs(adjusted)
+```
+
+On differencie une fois
+
+```{r}
+adjdiff <- diff(adjusted, differences=1)
+plot.ts(adjdiff)
+ggtsdisplay(adjdiff, lag=20)
+```
+
+
+On trouve 3 models possible en regardant les PACF et les ACF:
+
+### MA(1):
+
+```{r adj MA(1)}
+#PACF decroit vers 0 et 1 pic significatifs dans ACF => MA(1), 
+#ce qui donne ARIMA(0,1,1) car on a differencie
+adj.ma1 <- arima(adjusted, order=c(0,1,1)) 
+adj.ma1
+```
+
+
+```{r forecast adj ma1}
+adjforecasts.ma1 <- forecast(adj.ma1, h=10)
+plot(adjforecasts.ma1)
+
+```
+
+```{r residuals ma1 adj}
+
+ggtsdisplay(adjforecasts.ma1$residuals, lag =20)#les residuals sont bien un bruit blanc
+```
+
+Il n'y a que deux lags qui ne sont pas nuls dans les ACF.
+
+
+```{r test LJUNG MA1 adj}
+Box.test(adjforecasts.ma1$residuals, lag=20, type="Ljung-Box")
+
+```
+
+La p-value est superieure a 5%, on a bien un bruit blanc.
+
+
+### AR(5):
+```{r AR(5)}
+
+#ACF decroit vers 0 et 5 pics significatifs dans PACF => AR(5), 
+#ce qui donne ARIMA(5,1,0) car on a differencie
+adj.ar5 <- arima(adjusted, order=c(5,1,0)) 
+adj.ar5
+```
+
+
+```{r forecast ar5 adj}
+
+adjforecasts.ar5 <- forecast(adj.ar5, h=10)
+plot(adjforecasts.ar5)
+
+```
+
+```{r residuals ar5 adj}
+
+ggtsdisplay(adjforecasts.ar5$residuals, lag =20)
+
+```
+
+```{r LJUNG ar5 adj}
+Box.test(adjforecasts.ar5$residuals, lag=20, type="Ljung-Box")
+ 
+```
+
+Les residuals sont bien un bruit blanc
+
+
+
+### ARIMA(5,1,1):
+```{r ARIMA(5,1,1)}
+adj.arima <- arima(adjusted, order=c(5,1,1))
+adj.arima 
+```
+
+
+```{r adj arima forecast}
+
+adjforecasts3 <- forecast(adj.arima, h=10)
+plot(adjforecasts3)
+```
+
+
+
+```{r adj residuals arima}
+ggtsdisplay(adj.arima$residuals, lag =20)#les residuals sont bien un bruit blanc
+```
+
+```{r LJUNG arima adj}
+
+Box.test(adj.arima$residuals, lag=20, type="Ljung-Box")
+
+```
+Si on cherche le loglikelihood le plus eleve et minimiser le AIC, le 3eme ARIMA(5,1,1) est le plus approprié, ses résidus se rapprochent le plus d'un bruit blanc.
+Si on veut se fier au principe de parsimonie, on prendra plutot le MA(1).
+
+
+## 4)II)
+
+On regarde le modele donné par auto.arima():
+
+```{r}
+autoadj <- auto.arima(adjusted, seasonal=FALSE)
+autoadj
+```
+L'Auto Arima nous recommande un ARIMA(1,1,1)
+
+
+```{r forecast auto arima adj}
+adjforecasts4 <- forecast(autoadj, h=10)
+plot(adjforecasts4)
+```
+
+```{r residuals auto arima adj}
+ggtsdisplay(adjforecasts4$residuals, lag =20)#les residuals sont bien un bruit blanc
+```
+
+```{r LJUNG autoarima adj}
+Box.test(adjforecasts4$residuals, lag=20, type="Ljung-Box")
+
+```
+Les résiduels semblent bien etre un bruit blanc.
+
+
+
+On compare le modele de auto.arima(), ARIMA(1,1,1), au modele chosit precedemment:
+
+ARIMA(1,1,1) : log likelihood = -5953.6,   AIC = 11913.2
+ARIMA(5,1,1) : log likelihood = -5949.83,  AIC = 11913.66
+
+En termes de log likelihood et AIC ils sont tres similaires, donc on prend le modele avec le moins de parametres,c'est a dire ARIMA(1,1,1).
+
+
+
+
+## 4)III) Evaluer et Itérer:
+Comme vu précédemment, on avait trouvéun auto Arima peu complexe mais ses résidus ne formaient pas spécialement un bruit blanc, On peut donc essayer d'améliorer notre modele:
+On va commencer par entrainer 100 modeles ARIMA en iterant sur les valeurs de p et de q:
+
+```{r iteration, warning=FALSE}
+aic.valuesq <- c()
+for (p in c(0:9)){
+  for  (q in (0:9)){
+    deseasonal_cnt.arima <- arima(adjusted, order = c(p,1,q))
+    aic.valuesq <- c(aic.valuesq, deseasonal_cnt.arima$aic)
+}}
+
+which.min(aic.valuesq)
+```
+```{r print aic min}
+print(aic.valuesq[78])
+#q en premier aic min = 11903.39
+```
+On trouve que les parametres qui minimisent l'AIC sont p=7 et q=7.
+Notre modele est donc un ARIMA(7,1,7)
+
+
+```{r}
+cnt.arima15 <- arima(adjusted, order = c(7,1,7))
+cnt.arima15
+
+adjforecasts15 <- forecast(cnt.arima15, h=10)
+plot(adjforecasts15)
+```
+
+On peut apercevoir des variations dans la courbe du forecast et pas juste une ligne droite, ce qui fait apparaitre le forecast plus naturel.
+
+```{r residuals arima 15}
+ggtsdisplay(adjforecasts15$residuals, lag =20)#les residuals sont bien un bruit blanc
+```
+
+```{r LJUNG arima15 adj}
+Box.test(adjforecasts15$residuals, lag=20, type="Ljung-Box")
+
+```
+Ce modele a des residus qui se rapprochent le plus d'un bruit blanc.
+
+## 4)VI)
+
+On divise les datas en deux ensembles :
+
+```{r split the data train/test set}
+
+end.time = time(countts.clean)[700]
+train.set <- window(countts.clean, end=end.time)
+test.set <- window(countts.clean, start=end.time)
+
+plot.ts(countts.clean)
+plot.ts(train.set)
+
+```
+
+On fit le modele de auto.arima() sur l'ensemble de test et on fait un forecast sur les 25 prochaines valeurs:
+
+```{r}
+auto <- auto.arima(train.set)
+autoforecast <- forecast(auto, h=25)
+plot(autoforecast)
+```
+
+On fit le modele ARIMA(7,1,7) sur l'ensemble de test et on fait un forecast sur les 25 prochaines valeurs:
+```{r}
+manual <- arima(train.set, order=c(7,1,7))
+manualforecast <- forecast(manual, h=25)
+plot(manualforecast)
+
+```
+
+La time series originale:
+```{r}
+
+autoplot(countts.clean) +
+  autolayer(manualforecast, series = "ARIMA(7,1,7)", alpha = 1) +
+  autolayer(autoforecast, series = "ARIMA(1,1,1)", alpha = 0.5) +
+  guides(colour = guide_legend("Model"))
+
+```
+
+
+Les deux modeles donnent des courbes de prediction qui sont plus elevées que la time series originale.
+
+Cependant, On peut voir que Arima(7,1,7) se rapproche plus de la time series originale que Arima(1,1,1)
+
+
+Interessons nous maintenant a l'accuracy des deux modeles:
+```{r accuracy}
+accuracy(auto)
+accuracy(manual)
+
+```
+On a un RMSE minimal dans le cas du modele manuel, ce qui veut dire qu'on a moins d'erreurs entre les forecast et les valeurs originales.
+
+
+On remarque que le modele manuel donne une courbe qui a une allure plus naturelle alors que auto.arima() donne une courbe plus lisse. Par ailleurs les modeles on une difficulte a predire les valeurs eloignes dans le temps. En effect, ils devienent moins precis et l'intervalle de confiance s'elargit de plus en plus. 
+
+On prefera quand meme prendre le modele ARIMA(1,1,1) par principe de parsimonie, et pour éviter l'overfitting.
+
+
