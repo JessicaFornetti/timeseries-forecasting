@@ -1,5 +1,4 @@
 # timeseries-forecasting
-Bike Sharing Rental Time Series Forecasting 
 
 This project consists of time series forecasting on a bike sharing rental data in R. The following dataset is used: [Bike Sharing](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset).
 
